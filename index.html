@@ -4,73 +4,114 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Rooms</title>
-    <link rel="stylesheet" href="index.css">
+     <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="chat-style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <!-- Create Room Section -->
-        <div id="create-room-section" class="section active">
-            <div class="glass-card">
-                <h1>Create Your Chat Room</h1>
+        <div id="welcome-screen" class="screen active">
+            <div class="welcome-card">
+                <div class="logo">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <h1>Welcome to Pu-Chat</h1>
                 <div class="input-group">
-                    <i class="fas fa-user"></i>
-                    <input type="text" id="username" placeholder="Your Name">
-                </div>
-                <div class="input-group">
-                    <i class="fas fa-door-open"></i>
-                    <input type="text" id="room-name" placeholder="Room Name">
-                </div>
-                <button id="create-btn" class="btn-primary">
-                    <i class="fas fa-plus"></i> Create Room
-                </button>
-                <div id="room-url-container" class="hidden">
-                    <input type="text" id="room-url" readonly>
-                    <button id="copy-url" class="btn-secondary">
-                        <i class="fas fa-copy"></i> Copy URL
-                    </button>
-                    <button id="enter-room" class="btn-primary">
-                        <i class="fas fa-sign-in-alt"></i> Enter Room
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Join Room Section -->
-        <div id="join-room-section" class="section">
-            <div class="glass-card">
-                <h1>Join Chat Room</h1>
-                <div class="input-group">
-                    <i class="fas fa-user"></i>
-                    <input type="text" id="join-username" placeholder="Your Name">
-                </div>
-                <button id="join-btn" class="btn-primary">
-                    <i class="fas fa-sign-in-alt"></i> Join Room
-                </button>
-            </div>
-        </div>
-
-        <!-- Chat Room Section -->
-        <div id="chat-section" class="section">
-            <div class="chat-container">
-                <div class="chat-header">
-                    <h2 id="room-title"></h2>
-                    <div class="online-users">
-                        <i class="fas fa-users"></i>
-                        <span id="online-count">1</span>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="username" placeholder="Your name">
+                    </div>
+                    <div class="input-wrapper" id="room-input-wrapper">
+                        <i class="fas fa-door-open"></i>
+                        <input type="text" id="room-name" placeholder="Room name">
                     </div>
                 </div>
-                <div id="messages" class="messages"></div>
-                <div class="chat-input">
-                    <input type="text" id="message-input" placeholder="Type your message...">
-                    <button id="send-btn">
-                        <i class="fas fa-paper-plane"></i>
+                <button id="create-room-btn" class="primary-btn">
+                    <i class="fas fa-plus"></i>
+                    <span>Create Room</span>
+                </button>
+                <div class="join-info" id="join-info"></div>
+            </div>
+        </div>
+
+        <div id="invite-screen" class="screen">
+            <div class="invite-card">
+                <div class="success-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2>Room Created Successfully!</h2>
+                <div class="invite-link-container">
+                    <div class="input-wrapper">
+                        <i class="fas fa-link"></i>
+                        <input type="text" id="invite-link" readonly>
+                        <button id="copy-link-btn" class="icon-btn">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+                <button id="enter-room-btn" class="primary-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span>Enter Room</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="chat-screen" class="screen">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <div class="room-info">
+                        <h2 id="room-title"></h2>
+                        <div class="online-users">
+                            <i class="fas fa-users"></i>
+                            <span id="online-count">0</span> online
+                        </div>
+                    </div>
+                    <button id="leave-room-btn" class="icon-btn">
+                        <i class="fas fa-sign-out-alt"></i>
                     </button>
+                </div>
+
+                <div class="messages" id="messages">
+                    <div class="welcome-message">
+                        <div class="welcome-icon">
+                            <i class="fas fa-comments"></i>
+                        </div>
+                        <h3>Welcome to the chat!</h3>
+                        <p>Start sending messages to connect with others.</p>
+                    </div>
+                </div>
+
+                <div id="reply-bar" class="reply-bar hidden">
+                    <div class="reply-content">
+                        <i class="fas fa-reply"></i>
+                        <span id="reply-text"></span>
+                    </div>
+                    <button id="cancel-reply" class="icon-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="image-upload">
+                        <label for="image-input">
+                            <i class="fas fa-image"></i>
+                        </label>
+                        <input type="file" id="image-input" accept="image/*">
+                    </div>
+                    <div class="message-input-wrapper">
+                        <input type="text" id="message-input" placeholder="Type a message...">
+                        <button id="send-btn" class="icon-btn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <div id="notification" class="notification"></div>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="main.js"></script>
+    <script src="script.js"></script>
 </body>
-  </html>
+</html>
