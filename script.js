@@ -4,7 +4,6 @@ let currentRoom = null;
 let currentUsername = null;
 let replyingTo = null;
 
-// DOM Elements
 const elements = {
     welcomeScreen: document.getElementById('welcome-screen'),
     inviteScreen: document.getElementById('invite-screen'),
@@ -17,7 +16,6 @@ const elements = {
     enterRoomBtn: document.getElementById('enter-room-btn'),
     messagesContainer: document.getElementById('messages'),
     messageInput: document.getElementById('message-input'),
-    sendBtn: document.getElementById('send-btn'),
     roomTitle: document.getElementById('room-title'),
     onlineCount: document.getElementById('online-count'),
     replyBar: document.getElementById('reply-bar'),
@@ -28,7 +26,6 @@ const elements = {
     imageInput: document.getElementById('image-input')
 };
 
-// Check for room invite link
 window.addEventListener('load', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomId = urlParams.get('room');
@@ -42,11 +39,9 @@ window.addEventListener('load', () => {
     }
 });
 
-// Event Listeners
 elements.createRoomBtn.addEventListener('click', handleRoomAction);
 elements.copyLinkBtn.addEventListener('click', copyInviteLink);
 elements.enterRoomBtn.addEventListener('click', enterRoom);
-elements.sendBtn.addEventListener('click', sendMessage);
 elements.messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -56,7 +51,6 @@ elements.messageInput.addEventListener('keypress', (e) => {
 elements.cancelReply.addEventListener('click', cancelReply);
 elements.imageInput.addEventListener('change', handleImageUpload);
 
-// Room Functions
 function handleRoomAction() {
     const username = elements.usernameInput.value.trim();
     const roomName = currentRoom || `${elements.roomNameInput.value.trim()}-${Date.now()}`;
@@ -69,12 +63,10 @@ function handleRoomAction() {
     currentUsername = username;
 
     if (currentRoom) {
-        // Joining existing room
         socket.emit('joinRoom', { roomId: currentRoom, username });
         showScreen(elements.chatScreen);
         elements.roomTitle.textContent = 'Chat Room';
     } else {
-        // Creating new room
         if (!elements.roomNameInput.value.trim()) {
             showNotification('Please enter a room name');
             return;
@@ -97,17 +89,18 @@ function enterRoom() {
     elements.roomTitle.textContent = elements.roomNameInput.value || 'Chat Room';
 }
 
-// Message Functions
 function sendMessage() {
     const message = elements.messageInput.value.trim();
     if (!message) return;
 
-    socket.emit('chatMessage', {
+    const chatMessage = {
         message,
         roomId: currentRoom,
         replyTo: replyingTo
-    });
+    };
 
+    socket.emit('chatMessage', chatMessage);
+    storeChatMessage(chatMessage);
     elements.messageInput.value = '';
     cancelReply();
 }
@@ -121,19 +114,22 @@ function handleImageUpload(event) {
         return;
     }
 
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+    if (file.size > 5 * 1024 * 1024) {
         showNotification('Image size should be less than 5MB');
         return;
     }
 
     const reader = new FileReader();
     reader.onload = (e) => {
-        socket.emit('chatMessage', {
+        const imageMessage = {
             roomId: currentRoom,
             type: 'image',
             image: e.target.result,
             message: '📷 Image'
-        });
+        };
+        
+        socket.emit('chatMessage', imageMessage);
+        storeChatMessage(imageMessage);
     };
     reader.readAsDataURL(file);
 }
@@ -151,7 +147,6 @@ function cancelReply() {
     elements.replyText.textContent = '';
 }
 
-// UI Functions
 function showScreen(screen) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
@@ -196,7 +191,6 @@ function appendMessage(message) {
         messageContent = `<div class="message-content">${message.message}</div>`;
     }
 
-    // Append only one reply button depending on the device
     const isMobile = window.innerWidth <= 768;
     const replyButton = `
         <button class="reply-button" onclick='replyToMessage(${JSON.stringify(message)})'>
@@ -229,6 +223,7 @@ function appendMessage(message) {
         behavior: 'smooth'
     });
 }
+
 function appendSystemMessage(data) {
     const messageElement = document.createElement('div');
     messageElement.className = 'system-message';
@@ -263,7 +258,6 @@ function viewImage(src) {
     };
 }
 
-// Mobile Interactions
 let touchTimer;
 const touchDuration = 500;
 
@@ -296,7 +290,6 @@ function showMessageActions(messageElement) {
     messageElement.classList.toggle('show-actions');
 }
 
-// Socket Events
 socket.on('roomCreated', ({ roomId }) => {
     currentRoom = roomId;
 });
@@ -321,10 +314,22 @@ socket.on('pastMessages', (messages) => {
     messages.forEach(message => appendMessage(message));
 });
 
-// Initialize
-document.addEventListener('DOMContentLoaded', initializeMobileInteractions);
+function storeChatMessage(message) {
+    const storedMessages = JSON.parse(localStorage.getItem(currentRoom)) || [];
+    storedMessages.push(message);
+    localStorage.setItem(currentRoom, JSON.stringify(storedMessages));
+}
 
-// Close mobile actions when clicking outside
+function loadStoredMessages() {
+    const storedMessages = JSON.parse(localStorage.getItem(currentRoom)) || [];
+    storedMessages.forEach(message => appendMessage(message));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initializeMobileInteractions();
+    loadStoredMessages();
+});
+
 document.addEventListener('click', (event) => {
     if (!event.target.closest('.message-bubble') && !event.target.closest('.mobile-actions')) {
         document.querySelectorAll('.message.show-actions').forEach(msg => {
