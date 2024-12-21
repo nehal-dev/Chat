@@ -1,8 +1,15 @@
 const socket = io();
-
-let currentRoom = null;
-let currentUsername = null;
-let replyingTo = null;
+const state = {
+    currentRoom: null,
+    currentUsername: null,
+    replyingTo: null,
+    typingTimeout: null,
+    mediaGallery: [],
+    isTyping: false,
+    unreadMessages: 0,
+    roomMembers: new Set(),
+    sharedMedia: new Map()
+};
 
 const elements = {
     welcomeScreen: document.getElementById('welcome-screen'),
@@ -21,319 +28,198 @@ const elements = {
     replyBar: document.getElementById('reply-bar'),
     replyText: document.getElementById('reply-text'),
     cancelReply: document.getElementById('cancel-reply'),
-    roomInputWrapper: document.getElementById('room-input-wrapper'),
-    joinInfo: document.getElementById('join-info'),
-    imageInput: document.getElementById('image-input')
+    imageInput: document.getElementById('image-input'),
+    loadingIndicator: document.getElementById('loading-indicator'),
+    sendMessageBtn: document.getElementById('send-message-btn'),
+    typingIndicator: document.getElementById('typing-indicator')
 };
 
 window.addEventListener('load', () => {
+    const savedSession = localStorage.getItem('chatSession');
+    if (savedSession) {
+        const session = JSON.parse(savedSession);
+        state.currentUsername = session.username;
+        elements.usernameInput.value = session.username;
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const roomId = urlParams.get('room');
+    if (roomId) handleJoinViaLink(roomId);
+});
 
-    if (roomId) {
-        currentRoom = roomId;
-        elements.welcomeScreen.querySelector('h1').textContent = 'Join Room';
-        elements.roomInputWrapper.style.display = 'none';
-        elements.createRoomBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span>Join Room</span>';
-        elements.joinInfo.textContent = "You're joining an existing room";
+elements.createRoomBtn.addEventListener('click', () => {
+    const username = elements.usernameInput.value.trim();
+    const roomName = elements.roomNameInput.value.trim();
+    if (!username || !roomName) {
+        showNotification('Please fill in all fields');
+        return;
+    }
+    state.currentRoom = `${roomName}-${Date.now()}`;
+    state.currentUsername = username;
+    socket.emit('createRoom', { username, roomName, roomId: state.currentRoom });
+    localStorage.setItem('chatSession', JSON.stringify({ username, roomId: state.currentRoom }));
+    showInviteScreen();
+});
+
+elements.copyLinkBtn.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(elements.inviteLinkInput.value);
+        showNotification('Link copied!');
+    } catch (err) {
+        elements.inviteLinkInput.select();
+        document.execCommand('copy');
     }
 });
 
-elements.createRoomBtn.addEventListener('click', handleRoomAction);
-elements.copyLinkBtn.addEventListener('click', copyInviteLink);
-elements.enterRoomBtn.addEventListener('click', enterRoom);
+elements.enterRoomBtn.addEventListener('click', () => {
+    elements.inviteScreen.classList.remove('active');
+    elements.chatScreen.classList.add('active');
+    socket.emit('joinRoom', { 
+        username: state.currentUsername, 
+        roomId: state.currentRoom 
+    });
+});
+
 elements.messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
     }
 });
-elements.cancelReply.addEventListener('click', cancelReply);
-elements.imageInput.addEventListener('change', handleImageUpload);
 
-function handleRoomAction() {
-    const username = elements.usernameInput.value.trim();
-    const roomName = currentRoom || `${elements.roomNameInput.value.trim()}-${Date.now()}`;
-
-    if (!username) {
-        showNotification('Please enter your name');
-        return;
+elements.messageInput.addEventListener('input', () => {
+    if (!state.isTyping) {
+        state.isTyping = true;
+        socket.emit('typing', { 
+            username: state.currentUsername, 
+            roomId: state.currentRoom 
+        });
     }
+    clearTimeout(state.typingTimeout);
+    state.typingTimeout = setTimeout(() => {
+        state.isTyping = false;
+        socket.emit('stopTyping', { 
+            username: state.currentUsername, 
+            roomId: state.currentRoom 
+        });
+    }, 1000);
+});
 
-    currentUsername = username;
-
-    if (currentRoom) {
-        socket.emit('joinRoom', { roomId: currentRoom, username });
-        showScreen(elements.chatScreen);
-        elements.roomTitle.textContent = 'Chat Room';
-    } else {
-        if (!elements.roomNameInput.value.trim()) {
-            showNotification('Please enter a room name');
-            return;
+elements.imageInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files);
+    for (const file of files) {
+        if (file.size > 5242880) {
+            showNotification('Image must be less than 5MB');
+            continue;
         }
-        currentRoom = roomName;
-        socket.emit('createRoom', { roomId: currentRoom, username });
-        showScreen(elements.inviteScreen);
-        elements.inviteLinkInput.value = `${window.location.origin}?room=${currentRoom}`;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            socket.emit('imageMessage', {
+                username: state.currentUsername,
+                roomId: state.currentRoom,
+                image: e.target.result,
+                timestamp: new Date().toISOString(),
+                replyTo: state.replyingTo
+            });
+        };
+        reader.readAsDataURL(file);
     }
-}
-
-function copyInviteLink() {
-    elements.inviteLinkInput.select();
-    document.execCommand('copy');
-    showNotification('Invite link copied!');
-}
-
-function enterRoom() {
-    showScreen(elements.chatScreen);
-    elements.roomTitle.textContent = elements.roomNameInput.value || 'Chat Room';
-}
+    e.target.value = '';
+});
 
 function sendMessage() {
     const message = elements.messageInput.value.trim();
     if (!message) return;
-
-    const chatMessage = {
+    socket.emit('chatMessage', {
+        username: state.currentUsername,
+        roomId: state.currentRoom,
         message,
-        roomId: currentRoom,
-        replyTo: replyingTo
-    };
-
-    socket.emit('chatMessage', chatMessage);
-    storeChatMessage(chatMessage);
+        timestamp: new Date().toISOString(),
+        replyTo: state.replyingTo
+    });
     elements.messageInput.value = '';
-    cancelReply();
-}
-
-function handleImageUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-        showNotification('Please select an image file');
-        return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-        showNotification('Image size should be less than 5MB');
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const imageMessage = {
-            roomId: currentRoom,
-            type: 'image',
-            image: e.target.result,
-            message: '📷 Image'
-        };
-        
-        socket.emit('chatMessage', imageMessage);
-        storeChatMessage(imageMessage);
-    };
-    reader.readAsDataURL(file);
-}
-
-function replyToMessage(message) {
-    replyingTo = message;
-    elements.replyBar.classList.remove('hidden');
-    elements.replyText.textContent = `Replying to ${message.username}: ${message.message.substring(0, 30)}...`;
-    elements.messageInput.focus();
-}
-
-function cancelReply() {
-    replyingTo = null;
+    state.replyingTo = null;
     elements.replyBar.classList.add('hidden');
-    elements.replyText.textContent = '';
 }
 
-function showScreen(screen) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    screen.classList.add('active');
+function appendMessage(data) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${data.username === state.currentUsername ? 'sent' : 'received'}`;
+    
+    if (data.replyTo) {
+        const replyDiv = document.createElement('div');
+        replyDiv.className = 'reply-content';
+        replyDiv.textContent = `↪ ${data.replyTo.username}: ${data.replyTo.message || 'Image'}`;
+        messageDiv.appendChild(replyDiv);
+    }
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    
+    if (data.image) {
+        const img = document.createElement('img');
+        img.src = data.image;
+        img.className = 'message-image';
+        img.onclick = () => showImagePreview(data.image);
+        contentDiv.appendChild(img);
+    } else {
+        contentDiv.textContent = data.message;
+    }
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'message-time';
+    timeSpan.textContent = new Date(data.timestamp).toLocaleTimeString();
+    
+    messageDiv.appendChild(contentDiv);
+    messageDiv.appendChild(timeSpan);
+    elements.messagesContainer.appendChild(messageDiv);
+    elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
+}
+
+function showImagePreview(src) {
+    const modal = document.createElement('div');
+    modal.className = 'image-preview-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <img src="${src}">
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector('.close').onclick = () => modal.remove();
+    modal.onclick = (e) => {
+        if (e.target === modal) modal.remove();
+    };
 }
 
 function showNotification(message) {
-    const notification = document.createElement('div');
-    notification.className = 'notification';
+    const notification = document.getElementById('notification');
     notification.textContent = message;
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 100);
-
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            notification.remove();
-        }, 300);
-    }, 3000);
+    notification.classList.add('show');
+    setTimeout(() => notification.classList.remove('show'), 3000);
 }
 
-function appendMessage(message) {
-    const messageElement = document.createElement('div');
-    messageElement.className = `message ${message.username === currentUsername ? 'sent' : 'received'}`;
+function handleJoinViaLink(roomId) {
+    state.currentRoom = roomId;
+    elements.welcomeScreen.classList.remove('active');
+    elements.chatScreen.classList.add('active');
+}
 
-    let content = '';
-    if (message.replyTo) {
-        content += `
-            <div class="replied-message">
-                <small>Replying to ${message.replyTo.username}</small>
-                <p>${message.replyTo.message}</p>
-            </div>
-        `;
+socket.on('message', appendMessage);
+socket.on('imageMessage', appendMessage);
+socket.on('typing', (data) => {
+    if (data.username !== state.currentUsername) {
+        elements.typingIndicator.textContent = `${data.username} is typing...`;
+        elements.typingIndicator.classList.remove('hidden');
     }
-
-    let messageContent = '';
-    if (message.type === 'image') {
-        messageContent = `<img src="${message.image}" class="message-image" onclick="viewImage('${message.image}')">`;
-    } else {
-        messageContent = `<div class="message-content">${message.message}</div>`;
-    }
-
-    const isMobile = window.innerWidth <= 768;
-    const replyButton = `
-        <button class="reply-button" onclick='replyToMessage(${JSON.stringify(message)})'>
-            <i class="fas fa-reply"></i> Reply
-        </button>
-    `;
-
-    const mobileActions = `
-        <div class="mobile-actions">
-            ${replyButton}
-        </div>
-    `;
-
-    messageElement.innerHTML = `
-        <div class="message-bubble">
-            <div class="message-header">
-                <span class="username">${message.username}</span>
-                <span class="timestamp">${new Date(message.timestamp).toLocaleTimeString()}</span>
-            </div>
-            ${content}
-            ${messageContent}
-            ${isMobile ? '' : replyButton}
-        </div>
-        ${isMobile ? mobileActions : ''}
-    `;
-
-    elements.messagesContainer.appendChild(messageElement);
-    elements.messagesContainer.scrollTo({
-        top: elements.messagesContainer.scrollHeight,
-        behavior: 'smooth'
-    });
-}
-
-function appendSystemMessage(data) {
-    const messageElement = document.createElement('div');
-    messageElement.className = 'system-message';
-    messageElement.innerHTML = `
-        <div class="system-message-content">
-            <i class="fas fa-info-circle"></i>
-            <span>${data.message}</span>
-        </div>
-    `;
-    elements.messagesContainer.appendChild(messageElement);
-    elements.messagesContainer.scrollTo({
-        top: elements.messagesContainer.scrollHeight,
-        behavior: 'smooth'
-    });
-}
-
-function viewImage(src) {
-    const viewer = document.createElement('div');
-    viewer.className = 'image-viewer';
-    viewer.innerHTML = `
-        <div class="image-viewer-content">
-            <img src="${src}">
-            <button class="close-viewer">×</button>
-        </div>
-    `;
-    document.body.appendChild(viewer);
-
-    viewer.onclick = (e) => {
-        if (e.target === viewer || e.target.className === 'close-viewer') {
-            viewer.remove();
-        }
-    };
-}
-
-let touchTimer;
-const touchDuration = 500;
-
-function initializeMobileInteractions() {
-    document.addEventListener('touchstart', handleTouchStart, false);
-    document.addEventListener('touchend', handleTouchEnd, false);
-}
-
-function handleTouchStart(event) {
-    if (!event.target.closest('.message-bubble')) return;
-
-    touchTimer = setTimeout(() => {
-        const message = event.target.closest('.message');
-        if (message) {
-            showMessageActions(message);
-        }
-    }, touchDuration);
-}
-
-function handleTouchEnd() {
-    clearTimeout(touchTimer);
-}
-
-function showMessageActions(messageElement) {
-    document.querySelectorAll('.message.show-actions').forEach(msg => {
-        if (msg !== messageElement) {
-            msg.classList.remove('show-actions');
-        }
-    });
-    messageElement.classList.toggle('show-actions');
-}
-
-socket.on('roomCreated', ({ roomId }) => {
-    currentRoom = roomId;
 });
-
-socket.on('message', (message) => {
-    appendMessage(message);
+socket.on('stopTyping', () => {
+    elements.typingIndicator.classList.add('hidden');
 });
-
 socket.on('userJoined', (data) => {
-    appendSystemMessage(data);
+    showNotification(`${data.username} joined the room`);
+    elements.onlineCount.textContent = data.onlineCount;
 });
-
 socket.on('userLeft', (data) => {
-    appendSystemMessage(data);
-});
-
-socket.on('updateUserCount', (count) => {
-    elements.onlineCount.textContent = count;
-});
-
-socket.on('pastMessages', (messages) => {
-    messages.forEach(message => appendMessage(message));
-});
-
-function storeChatMessage(message) {
-    const storedMessages = JSON.parse(localStorage.getItem(currentRoom)) || [];
-    storedMessages.push(message);
-    localStorage.setItem(currentRoom, JSON.stringify(storedMessages));
-}
-
-function loadStoredMessages() {
-    const storedMessages = JSON.parse(localStorage.getItem(currentRoom)) || [];
-    storedMessages.forEach(message => appendMessage(message));
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    initializeMobileInteractions();
-    loadStoredMessages();
-});
-
-document.addEventListener('click', (event) => {
-    if (!event.target.closest('.message-bubble') && !event.target.closest('.mobile-actions')) {
-        document.querySelectorAll('.message.show-actions').forEach(msg => {
-            msg.classList.remove('show-actions');
-        });
-    }
+    showNotification(`${data.username} left the room`);
+    elements.onlineCount.textContent = data.onlineCount;
 });
