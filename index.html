@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Rooms</title>
+    <title>Pu-Chat - Real-time Chat Rooms</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="chat-style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -11,6 +11,7 @@
 </head>
 <body>
     <div class="container">
+        <!-- Welcome Screen -->
         <div id="welcome-screen" class="screen active">
             <div class="welcome-card">
                 <div class="logo">
@@ -20,11 +21,11 @@
                 <div class="input-group">
                     <div class="input-wrapper">
                         <i class="fas fa-user"></i>
-                        <input type="text" id="username" placeholder="Your name">
+                        <input type="text" id="username" placeholder="Your name" maxlength="20">
                     </div>
                     <div class="input-wrapper" id="room-input-wrapper">
                         <i class="fas fa-door-open"></i>
-                        <input type="text" id="room-name" placeholder="Room name">
+                        <input type="text" id="room-name" placeholder="Room name" maxlength="30">
                     </div>
                 </div>
                 <button id="create-room-btn" class="primary-btn">
@@ -35,6 +36,7 @@
             </div>
         </div>
 
+        <!-- Invite Screen -->
         <div id="invite-screen" class="screen">
             <div class="invite-card">
                 <div class="success-icon">
@@ -45,7 +47,7 @@
                     <div class="input-wrapper">
                         <i class="fas fa-link"></i>
                         <input type="text" id="invite-link" readonly>
-                        <button id="copy-link-btn" class="icon-btn">
+                        <button id="copy-link-btn" class="icon-btn" title="Copy link">
                             <i class="fas fa-copy"></i>
                         </button>
                     </div>
@@ -57,8 +59,10 @@
             </div>
         </div>
 
+        <!-- Chat Screen -->
         <div id="chat-screen" class="screen">
             <div class="chat-container">
+                <!-- Chat Header -->
                 <div class="chat-header">
                     <div class="room-info">
                         <h2 id="room-title"></h2>
@@ -67,21 +71,41 @@
                             <span id="online-count">0</span> online
                         </div>
                     </div>
-                    <button id="leave-room-btn" class="icon-btn">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
-
-                <div class="messages" id="messages">
-                    <div class="welcome-message">
-                        <div class="welcome-icon">
-                            <i class="fas fa-comments"></i>
-                        </div>
-                        <h3>Welcome to the chat!</h3>
-                        <p>Start sending messages to connect with others.</p>
+                    <div class="header-actions">
+                        <button id="toggle-media-btn" class="icon-btn" title="Show media">
+                            <i class="fas fa-images"></i>
+                        </button>
+                        <button id="leave-room-btn" class="icon-btn" title="Leave room">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </button>
                     </div>
                 </div>
 
+                <!-- Messages Container -->
+                <div class="messages-wrapper">
+                    <div class="messages" id="messages">
+                        <div class="welcome-message">
+                            <div class="welcome-icon">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <h3>Welcome to the chat!</h3>
+                            <p>Start sending messages to connect with others.</p>
+                        </div>
+                    </div>
+
+                    <!-- Media Gallery Sidebar -->
+                    <div id="media-gallery" class="media-gallery hidden">
+                        <div class="gallery-header">
+                            <h3>Shared Media</h3>
+                            <button class="icon-btn" id="close-gallery">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="gallery-content" id="gallery-content"></div>
+                    </div>
+                </div>
+
+                <!-- Reply Bar -->
                 <div id="reply-bar" class="reply-bar hidden">
                     <div class="reply-content">
                         <i class="fas fa-reply"></i>
@@ -92,23 +116,57 @@
                     </button>
                 </div>
 
+                <!-- Chat Input -->
                 <div class="chat-input-container">
-                    <div class="image-upload">
-                        <label for="image-input">
-                            <i class="fas fa-image"></i>
-                        </label>
-                        <input type="file" id="image-input" accept="image/*">
+                    <div class="input-actions">
+                        <div class="image-upload">
+                            <label for="image-input" class="upload-label" title="Send image">
+                                <i class="fas fa-image"></i>
+                            </label>
+                            <input type="file" id="image-input" accept="image/*" multiple>
+                        </div>
+                        <div class="emoji-picker-btn" id="emoji-btn" title="Emoji">
+                            <i class="far fa-smile"></i>
+                        </div>
                     </div>
                     <div class="message-input-wrapper">
                         <input type="text" id="message-input" placeholder="Type a message...">
+                        <div class="input-feedback">
+                            <span id="typing-indicator" class="hidden">Someone is typing...</span>
+                        </div>
                     </div>
+                    <button id="send-message-btn" class="icon-btn send-btn" title="Send">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Image Preview Modal -->
+    <div id="image-preview-modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="close-modal">×</button>
+            <img id="preview-image" src="" alt="Preview">
+            <div class="image-controls">
+                <button id="prev-image" class="icon-btn"><i class="fas fa-chevron-left"></i></button>
+                <button id="next-image" class="icon-btn"><i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading-indicator" class="loading-indicator hidden">
+        <div class="spinner"></div>
+        <span>Loading...</span>
+    </div>
+
+    <!-- Notifications -->
     <div id="notification" class="notification"></div>
+
+    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/data"></script>
     <script src="script.js"></script>
 </body>
 </html>
